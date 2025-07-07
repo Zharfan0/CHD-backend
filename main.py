@@ -16,11 +16,15 @@ app = FastAPI()
 # ✅ Middleware CORS agar bisa diakses dari frontend React/Next.js
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Sesuaikan jika frontend deploy
+    allow_origins=[
+        "http://localhost:3000",
+        "https://chd-main.vercel.app",  # ✅ tambahkan domain Vercel kamu
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ✅ Struktur data input dari frontend
 class InputData(BaseModel):
