@@ -3,6 +3,6 @@ uvicorn
 scikit-learn
 joblib
 numpy
-
+pydantic
 keras
 tensorflow
