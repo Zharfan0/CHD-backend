@@ -18,13 +18,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://chd-main.vercel.app",  # ✅ tambahkan domain Vercel kamu
+        "https://chd-main.vercel.app"  # ✅ tambahkan domain vercel kamu di sini
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ✅ Struktur data input dari frontend
 class InputData(BaseModel):
