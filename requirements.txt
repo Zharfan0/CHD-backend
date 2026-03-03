@@ -6,3 +6,4 @@ numpy
 pydantic
 keras
 tensorflow
+tensorflow-cpu

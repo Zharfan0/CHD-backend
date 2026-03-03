@@ -5,13 +5,16 @@ import numpy as np
 import joblib
 from typing import Optional
 
-
 # ✅ Load model
 model_rf = joblib.load("model_rf.pkl")
 model_mi = joblib.load("model_mi_best.pkl")
 
 # ✅ Inisialisasi FastAPI
 app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"status": "CHD Backend is running"}
 
 # ✅ Middleware CORS agar bisa diakses dari frontend React/Next.js
 app.add_middleware(
