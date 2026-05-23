@@ -10,7 +10,7 @@ from sklearn.preprocessing import LabelEncoder
 # ✅ LOAD ALL MODELS & SCALERS
 # ============================================
 
-model_full = joblib.load("model_full_39_cnn_lstm.pkl")
+model_full = joblib.load("model_full_38_cnn_lstm.pkl")
 model_mi = joblib.load("model_mi_10_cnn_lstm.pkl")
 model_rf = joblib.load("model_rf_10_cnn_lstm.pkl")
 
