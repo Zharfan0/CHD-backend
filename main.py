@@ -140,7 +140,7 @@ def predict_full(data: PredictionInput):
         proba = model_full.predict(input_reshaped)
         prediction = int(proba[0][0] >= 0.5)
         return {
-            "model": "CNN-LSTM (39 fitur)",
+            "model": "CNN-LSTM (38 fitur)",
             "prediction": prediction,
             "probability": float(proba[0][0])
         }
