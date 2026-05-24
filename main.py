@@ -26,7 +26,7 @@ print("✅ All models & scalers loaded!")
 
 # 39 Fitur untuk Model Full
 FULL_FEATURES = [
-    'State', 'Sex', 'GeneralHealth', 'PhysicalHealthDays', 'MentalHealthDays',
+    'Sex', 'GeneralHealth', 'PhysicalHealthDays', 'MentalHealthDays',
     'LastCheckupTime', 'PhysicalActivities', 'SleepHours', 'RemovedTeeth',
     'HadAngina', 'HadStroke', 'HadAsthma', 'HadSkinCancer', 'HadCOPD',
     'HadDepressiveDisorder', 'HadKidneyDisease', 'HadArthritis', 'HadDiabetes',
