@@ -7,3 +7,4 @@ pydantic
 keras
 tensorflow
 tensorflow-cpu
+pandas
