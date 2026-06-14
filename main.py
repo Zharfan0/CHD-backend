@@ -1,288 +1,184 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, Any
 import numpy as np
 import joblib
 import tensorflow as tf
+from typing import Optional
 
-# ============================================================
-# LOAD ARTEFAK — baca dari metadata, TIDAK hardcode fitur
-# ============================================================
+# ============================================
+# LOAD MODELS
+# ============================================
 
-# --- Model (format .keras) ---
-model_rf   = tf.keras.models.load_model("model_rf_cnn_lstm.keras")
-model_mi   = tf.keras.models.load_model("model_mi_cnn_lstm.keras")
-model_full = tf.keras.models.load_model("model_full_cnn_lstm.keras")
+# Full CNN-LSTM (37 fitur)
+model_full     = tf.keras.models.load_model("model_full_cnn_lstm.keras")
+scaler_full    = joblib.load("scaler_full.pkl")   # ← sesuaikan nama filenya
 
-# --- Scaler ---
-scaler_rf   = joblib.load("scaler_rf.pkl")
-scaler_mi   = joblib.load("scaler_mi.pkl")
-scaler_full = joblib.load("scaler_full.pkl")
+# Two-Stage (CNN-LSTM MI k=15 + LR)
+model_stage1   = tf.keras.models.load_model("model_stage1_cnn_lstm.keras")
+model_stage2   = joblib.load("model_stage2_lr.pkl")
+scaler_mi15    = joblib.load("scaler_mi15.pkl")
 
-# --- Encoder per kolom ---
-encoders_rf   = joblib.load("encoders_rf.pkl")
-encoders_mi   = joblib.load("encoders_mi.pkl")
-encoders_full = joblib.load("encoders_full.pkl")
+THR_STAGE1 = 0.30
+THR_STAGE2 = 0.50
 
-# --- Metadata (berisi selected_features & encoder_types) ---
-metadata_rf   = joblib.load("metadata_rf.pkl")
-metadata_mi   = joblib.load("metadata_mi.pkl")
-metadata_full = joblib.load("metadata_full.pkl")
+print("All models loaded!")
 
-# Ambil urutan fitur langsung dari metadata — TIDAK hardcode
-RF_FEATURES   = metadata_rf["selected_features"]    # 34 fitur
-MI_FEATURES   = metadata_mi["selected_features"]    # 35 fitur
-FULL_FEATURES = metadata_full["selected_features"]  # 37 fitur
+# ============================================
+# FITUR
+# ============================================
 
-# Tipe encoder per kolom (hanya ada di MI)
-MI_ENCODER_TYPES = metadata_mi.get("encoder_types", {})
+FULL_FEATURES = [
+    'sex', 'generalhealth', 'physicalhealthdays', 'mentalhealthdays',
+    'lastcheckuptime', 'physicalactivities', 'sleephours', 'removedteeth',
+    'hadstroke', 'hadasthma', 'hadskincancer', 'hadcopd',
+    'haddepressivedisorder', 'hadkidneydisease', 'hadarthritis', 'haddiabetes',
+    'deaforhardofhearing', 'blindorvisiondifficulty', 'difficultyconcentrating',
+    'difficultywalking', 'difficultydressingbathing', 'difficultyerrands',
+    'smokerstatus', 'ecigaretteusage', 'chestscan', 'raceethnicitycategory',
+    'agecategory', 'heightinmeters', 'weightinkilograms', 'bmi',
+    'alcoholdrinkers', 'hivtesting', 'fluvaxlast12', 'pneumovaxever',
+    'tetanuslast10tdap', 'highrisklastyear', 'covidpos'
+]  # 37 fitur (HadAngina dikeluarkan karena target variable)
 
-print("✅ Semua model, scaler, encoder, dan metadata berhasil di-load!")
-print(f"   RF   : {len(RF_FEATURES)} fitur")
-print(f"   MI   : {len(MI_FEATURES)} fitur")
-print(f"   Full : {len(FULL_FEATURES)} fitur")
+TWO_STAGE_FEATURES = [
+    'physicalactivities', 'chestscan', 'alcoholdrinkers',
+    'fluvaxlast12', 'lastcheckuptime', 'pneumovaxever',
+    'generalhealth', 'sex', 'raceethnicitycategory',
+    'agecategory', 'hadarthritis', 'removedteeth',
+    'tetanuslast10tdap', 'hivtesting', 'difficultywalking'
+]  # 15 fitur MI k=15
 
+# ============================================
+# APP
+# ============================================
 
-# ============================================================
-# FASTAPI APP
-# ============================================================
-
-app = FastAPI(title="CHD Prediction API", version="2.0")
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://chd-main.vercel.app"
-    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:3000",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ============================================
+# INPUT MODEL
+# ============================================
+
+class PredictionInput(BaseModel):
+    sex: Optional[float] = 0
+    generalhealth: Optional[float] = 0
+    physicalhealthdays: Optional[float] = 0
+    mentalhealthdays: Optional[float] = 0
+    lastcheckuptime: Optional[float] = 0
+    physicalactivities: Optional[float] = 0
+    sleephours: Optional[float] = 0
+    removedteeth: Optional[float] = 0
+    hadstroke: Optional[float] = 0
+    hadasthma: Optional[float] = 0
+    hadskincancer: Optional[float] = 0
+    hadcopd: Optional[float] = 0
+    haddepressivedisorder: Optional[float] = 0
+    hadkidneydisease: Optional[float] = 0
+    hadarthritis: Optional[float] = 0
+    haddiabetes: Optional[float] = 0
+    deaforhardofhearing: Optional[float] = 0
+    blindorvisiondifficulty: Optional[float] = 0
+    difficultyconcentrating: Optional[float] = 0
+    difficultywalking: Optional[float] = 0
+    difficultydressingbathing: Optional[float] = 0
+    difficultyerrands: Optional[float] = 0
+    smokerstatus: Optional[float] = 0
+    ecigaretteusage: Optional[float] = 0
+    chestscan: Optional[float] = 0
+    raceethnicitycategory: Optional[float] = 0
+    agecategory: Optional[float] = 0
+    heightinmeters: Optional[float] = 0
+    weightinkilograms: Optional[float] = 0
+    bmi: Optional[float] = 0
+    alcoholdrinkers: Optional[float] = 0
+    hivtesting: Optional[float] = 0
+    fluvaxlast12: Optional[float] = 0
+    pneumovaxever: Optional[float] = 0
+    tetanuslast10tdap: Optional[float] = 0
+    highrisklastyear: Optional[float] = 0
+    covidpos: Optional[float] = 0
+
+# ============================================
+# HELPER
+# ============================================
+
+def preprocess_cnn(data: PredictionInput, features: list, scaler):
+    input_arr    = np.array([[float(getattr(data, f)) for f in features]])
+    input_scaled = scaler.transform(input_arr)
+    return input_scaled, input_scaled.reshape(1, len(features), 1)
+
+# ============================================
+# ENDPOINTS
+# ============================================
 
 @app.get("/")
 def root():
     return {
-        "status" : "CHD Backend v2.0 is running",
-        "target" : "HadAngina (Coronary Heart Disease)",
-        "models" : {
-            "rf"   : f"CNN-LSTM + RF Feature Importance ({len(RF_FEATURES)} fitur)",
-            "mi"   : f"CNN-LSTM + Mutual Information ({len(MI_FEATURES)} fitur)",
-            "full" : f"CNN-LSTM Full ({len(FULL_FEATURES)} fitur)",
+        "status": "MyHeartD Backend running",
+        "models": {
+            "full": f"{len(FULL_FEATURES)} fitur",
+            "two-stage": f"{len(TWO_STAGE_FEATURES)} fitur (CNN-LSTM MI + LR)"
         }
     }
 
-
-@app.get("/features")
-def get_features():
-    """Endpoint untuk frontend mengetahui fitur yang dibutuhkan tiap model."""
-    return {
-        "rf"   : RF_FEATURES,
-        "mi"   : MI_FEATURES,
-        "full" : FULL_FEATURES,
-    }
-
-
-# ============================================================
-# INPUT DATA MODEL
-# Semua fitur yang mungkin dibutuhkan oleh salah satu model
-# ============================================================
-
-class PredictionInput(BaseModel):
-    Sex:                    Optional[Any] = None
-    GeneralHealth:          Optional[Any] = None
-    PhysicalHealthDays:     Optional[Any] = None
-    MentalHealthDays:       Optional[Any] = None
-    LastCheckupTime:        Optional[Any] = None
-    PhysicalActivities:     Optional[Any] = None
-    SleepHours:             Optional[Any] = None
-    RemovedTeeth:           Optional[Any] = None
-    HadStroke:              Optional[Any] = None
-    HadAsthma:              Optional[Any] = None
-    HadSkinCancer:          Optional[Any] = None
-    HadCOPD:                Optional[Any] = None
-    HadDepressiveDisorder:  Optional[Any] = None
-    HadKidneyDisease:       Optional[Any] = None
-    HadArthritis:           Optional[Any] = None
-    HadDiabetes:            Optional[Any] = None
-    DeafOrHardOfHearing:    Optional[Any] = None
-    BlindOrVisionDifficulty:Optional[Any] = None
-    DifficultyConcentrating:Optional[Any] = None
-    DifficultyWalking:      Optional[Any] = None
-    DifficultyDressingBathing:Optional[Any] = None
-    DifficultyErrands:      Optional[Any] = None
-    SmokerStatus:           Optional[Any] = None
-    ECigaretteUsage:        Optional[Any] = None
-    ChestScan:              Optional[Any] = None
-    RaceEthnicityCategory:  Optional[Any] = None
-    AgeCategory:            Optional[Any] = None
-    HeightInMeters:         Optional[Any] = None
-    WeightInKilograms:      Optional[Any] = None
-    BMI:                    Optional[Any] = None
-    AlcoholDrinkers:        Optional[Any] = None
-    HIVTesting:             Optional[Any] = None
-    FluVaxLast12:           Optional[Any] = None
-    PneumoVaxEver:          Optional[Any] = None
-    TetanusLast10Tdap:      Optional[Any] = None
-    HighRiskLastYear:       Optional[Any] = None
-    CovidPos:               Optional[Any] = None
-
-
-# ============================================================
-# HELPER: ENCODE SATU NILAI
-# ============================================================
-
-def encode_value(col: str, value: Any, encoders: dict,
-                 encoder_types: dict = None) -> float:
-    """
-    Encode satu nilai input sesuai encoder yang dipakai saat training.
-
-    - Jika nilai sudah numerik → langsung pakai
-    - Jika ada encoder untuk kolom ini → transform
-    - Kalau nilai tidak dikenal encoder → kembalikan 0 (default aman)
-    """
-    if value is None:
-        return 0.0
-
-    # Sudah numerik, tidak perlu encode
-    if isinstance(value, (int, float)):
-        return float(value)
-
-    # Nilai berupa string → perlu encode
-    str_val = str(value)
-
-    if col not in encoders:
-        # Kolom numerik asli, coba konversi langsung
-        try:
-            return float(str_val)
-        except ValueError:
-            return 0.0
-
-    enc = encoders[col]
-    enc_type = (encoder_types or {}).get(col, "LabelEncoder")
-
-    try:
-        if enc_type == "OrdinalEncoder":
-            # OrdinalEncoder expects 2D array
-            result = enc.transform([[str_val]])
-            return float(result[0][0])
-        else:
-            # LabelEncoder expects 1D
-            result = enc.transform([str_val])
-            return float(result[0])
-    except (ValueError, KeyError):
-        # Nilai tidak dikenal encoder → kembalikan -1 (unknown_value OrdinalEncoder)
-        # atau 0 untuk LabelEncoder
-        return -1.0 if enc_type == "OrdinalEncoder" else 0.0
-
-
-# ============================================================
-# HELPER: PREPROCESS LENGKAP
-# ============================================================
-
-def preprocess(data: PredictionInput,
-               features: list,
-               scaler,
-               encoders: dict,
-               encoder_types: dict = None) -> np.ndarray:
-    """
-    1. Ambil nilai tiap fitur dari input sesuai urutan `features`
-    2. Encode nilai string → integer sesuai encoder training
-    3. Scale dengan scaler training
-    4. Reshape ke (1, n_features, 1) untuk CNN-LSTM
-    """
-    input_list = []
-    for col in features:
-        raw = getattr(data, col, None)
-        encoded = encode_value(col, raw, encoders, encoder_types)
-        input_list.append(encoded)
-
-    input_array  = np.array([input_list], dtype=np.float32)
-    input_scaled = scaler.transform(input_array)
-    input_3d     = input_scaled.reshape(1, input_scaled.shape[1], 1)
-    return input_3d
-
-
-# ============================================================
-# ENDPOINTS PREDIKSI
-# ============================================================
-
-@app.post("/predict/rf")
-def predict_rf(data: PredictionInput):
-    """Prediksi dengan CNN-LSTM + RF Feature Importance (34 fitur)."""
-    try:
-        X = preprocess(data, RF_FEATURES, scaler_rf, encoders_rf)
-        proba = float(model_rf.predict(X, verbose=0)[0][0])
-        return {
-            "model"      : f"CNN-LSTM + RF ({len(RF_FEATURES)} fitur)",
-            "prediction" : int(proba >= 0.5),
-            "probability": round(proba, 4),
-            "features_used": RF_FEATURES,
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.post("/predict/mi")
-def predict_mi(data: PredictionInput):
-    """Prediksi dengan CNN-LSTM + Mutual Information (35 fitur)."""
-    try:
-        X = preprocess(data, MI_FEATURES, scaler_mi, encoders_mi,
-                       encoder_types=MI_ENCODER_TYPES)
-        proba = float(model_mi.predict(X, verbose=0)[0][0])
-        return {
-            "model"      : f"CNN-LSTM + MI ({len(MI_FEATURES)} fitur)",
-            "prediction" : int(proba >= 0.5),
-            "probability": round(proba, 4),
-            "features_used": MI_FEATURES,
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
+@app.get("/features/{model}")
+def get_features(model: str):
+    if model == "full":
+        return {"model": "full", "features": FULL_FEATURES, "count": len(FULL_FEATURES)}
+    elif model == "two-stage":
+        return {"model": "two-stage", "features": TWO_STAGE_FEATURES, "count": len(TWO_STAGE_FEATURES)}
+    return {"error": "Model tidak dikenal. Gunakan 'full' atau 'two-stage'"}
 
 @app.post("/predict/full")
 def predict_full(data: PredictionInput):
-    """Prediksi dengan CNN-LSTM Full (37 fitur, tanpa seleksi)."""
     try:
-        X = preprocess(data, FULL_FEATURES, scaler_full, encoders_full)
-        proba = float(model_full.predict(X, verbose=0)[0][0])
+        _, input_3d = preprocess_cnn(data, FULL_FEATURES, scaler_full)
+        proba       = float(model_full.predict(input_3d, verbose=0)[0][0])
+        prediction  = int(proba >= 0.50)
         return {
-            "model"      : f"CNN-LSTM Full ({len(FULL_FEATURES)} fitur)",
-            "prediction" : int(proba >= 0.5),
-            "probability": round(proba, 4),
-            "features_used": FULL_FEATURES,
+            "model": "CNN-LSTM Full (37 fitur)",
+            "prediction": prediction,
+            "probability": proba
         }
     except Exception as e:
         return {"error": str(e)}
 
+@app.post("/predict/two-stage")
+def predict_two_stage(data: PredictionInput):
+    try:
+        input_scaled, input_3d = preprocess_cnn(data, TWO_STAGE_FEATURES, scaler_mi15)
 
-# ============================================================
-# ENDPOINT PREDIKSI SEMUA MODEL SEKALIGUS
-# ============================================================
+        # Stage 1 — CNN-LSTM
+        s1_proba = float(model_stage1.predict(input_3d, verbose=0)[0][0])
 
-@app.post("/predict/all")
-def predict_all(data: PredictionInput):
-    """Jalankan ketiga model sekaligus dan kembalikan perbandingan."""
-    results = {}
-    for name, feats, scaler, encoders, enc_types, model in [
-        ("rf",   RF_FEATURES,   scaler_rf,   encoders_rf,   None,              model_rf),
-        ("mi",   MI_FEATURES,   scaler_mi,   encoders_mi,   MI_ENCODER_TYPES,  model_mi),
-        ("full", FULL_FEATURES, scaler_full, encoders_full, None,              model_full),
-    ]:
-        try:
-            X     = preprocess(data, feats, scaler, encoders, enc_types)
-            proba = float(model.predict(X, verbose=0)[0][0])
-            results[name] = {
-                "prediction" : int(proba >= 0.5),
-                "probability": round(proba, 4),
-                "n_features" : len(feats),
+        if s1_proba < THR_STAGE1:
+            return {
+                "model": "Two-Stage (early exit Stage 1)",
+                "prediction": 0,
+                "probability": round(1 - s1_proba, 4),
+                "stage": 1,
+                "stage1_proba": round(s1_proba, 4)
             }
-        except Exception as e:
-            results[name] = {"error": str(e)}
 
-    return {
-        "target" : "HadAngina (CHD)",
-        "results": results,
-    }
+        # Stage 2 — Logistic Regression
+        s2_proba   = float(model_stage2.predict_proba(input_scaled)[0][1])
+        prediction = int(s2_proba >= THR_STAGE2)
+
+        return {
+            "model": "Two-Stage (CNN-LSTM MI + LR)",
+            "prediction": prediction,
+            "probability": round(s2_proba, 4),
+            "stage": 2,
+            "stage1_proba": round(s1_proba, 4),
+            "stage2_proba": round(s2_proba, 4)
+        }
+    except Exception as e:
+        return {"error": str(e)}
